@@ -1,0 +1,7 @@
+# Vendored: Geist subset with base64-inlined font data (see NOTICE).
+# Kept byte-identical to what the subsetter emitted.
+src/client/fonts.css
+
+# Generated
+types/
+package-lock.json
