@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Generated at publish time by `npm run types`
+types/
+
+# Build / pack output
+dist/
+*.tgz
+
+# Tooling caches
+.vite/
+.eslintcache
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / editor cruft
+.DS_Store
+.idea/
+.vscode/
+*.swp

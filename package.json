@@ -15,8 +15,7 @@
     "types",
     "licenses",
     "LICENSE",
-    "NOTICE",
-    "NOTES.md"
+    "NOTICE"
   ],
   "scripts": {
     "demo": "node ./src/cli.js fixtures/demo-app",
