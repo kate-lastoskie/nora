@@ -1,0 +1,41 @@
+/*
+ * The demo app's own palette, keyed on the attribute nora sets on the frame's
+ * root element.
+ *
+ * That attribute is the entire contract: nora says which theme is active, and
+ * your components decide what that means. Nothing here reads nora's own
+ * variables, deliberately, because a real app would not have them in scope —
+ * the previewed component renders inside an iframe that loads your stylesheets,
+ * not the toolbar's.
+ */
+:root {
+  --demo-surface: #ffffff;
+  --demo-ink: #14171c;
+  --demo-muted: #5c6672;
+  --demo-line: #d8dce1;
+  --demo-accent: #1b7da3;
+  --demo-on-accent: #ffffff;
+
+  --demo-info-bg: #e2eef3;
+  --demo-info-ink: #14607f;
+  --demo-warn-bg: #f7eadb;
+  --demo-warn-ink: #b25a08;
+  --demo-good-bg: #e3f1e7;
+  --demo-good-ink: #1f6b38;
+}
+
+:root[data-nora-theme="dark"] {
+  --demo-surface: #181c22;
+  --demo-ink: #e6e9ed;
+  --demo-muted: #8b95a2;
+  --demo-line: #262d36;
+  --demo-accent: #57add0;
+  --demo-on-accent: #0d1013;
+
+  --demo-info-bg: rgba(87, 173, 208, 0.15);
+  --demo-info-ink: #57add0;
+  --demo-warn-bg: rgba(234, 140, 60, 0.15);
+  --demo-warn-ink: #ea8c3c;
+  --demo-good-bg: rgba(76, 166, 107, 0.15);
+  --demo-good-ink: #4ca66b;
+}

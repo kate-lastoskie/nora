@@ -1,0 +1,87 @@
+{
+  "name": "vite-plugin-nora",
+  "version": "0.1.0",
+  "description": "A floating bar that switches your app between components. Point it at a folder.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "nora": "./src/cli.js"
+  },
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "src",
+    "types",
+    "licenses",
+    "LICENSE",
+    "NOTICE",
+    "NOTES.md"
+  ],
+  "scripts": {
+    "demo": "node ./src/cli.js fixtures/demo-app",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit",
+    "types": "tsc -p tsconfig.build.json",
+    "test": "node --test test/*.test.js",
+    "check": "npm run lint && npm run format:check && npm run typecheck && npm test",
+    "prepublishOnly": "npm run check && npm run types"
+  },
+  "dependencies": {
+    "es-module-lexer": "^1.5.4",
+    "esbuild": "^0.21.5",
+    "fast-glob": "^3.3.2",
+    "picocolors": "^1.1.1"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18",
+    "vite": ">=5"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.5.1",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^4.3.4",
+    "eslint": "^10.10.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.12.0",
+    "prettier": "^3.9.6",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^7.0.2",
+    "vite": "^5.4.11"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "types": "./types/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kate-lastoskie/nora.git"
+  },
+  "homepage": "https://github.com/kate-lastoskie/nora#readme",
+  "bugs": {
+    "url": "https://github.com/kate-lastoskie/nora/issues"
+  },
+  "keywords": [
+    "vite",
+    "vite-plugin",
+    "react",
+    "components",
+    "preview",
+    "storybook",
+    "responsive"
+  ]
+}

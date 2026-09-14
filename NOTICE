@@ -1,0 +1,26 @@
+nora bundles two third-party works. Neither is a runtime
+dependency — both are copied into source so the package installs with nothing
+but its own four deps, and so the bar looks the same with no network.
+
+--------------------------------------------------------------------------------
+Geist and Geist Mono — SIL Open Font License 1.1
+Copyright 2024 The Geist Project Authors
+https://github.com/vercel/geist-font
+
+Subset and inlined as base64 in src/client/fonts.css. The @font-face families
+are named "Nora Geist" and "Nora Geist Mono" — a namespace, not a licence
+requirement: Geist declares no Reserved Font Name, but these faces carry only
+the glyphs this UI draws, and a project loading the real Geist should never
+find our partial one shadowing it.
+
+Full licence: licenses/geist-OFL.txt
+--------------------------------------------------------------------------------
+Lucide — ISC License
+Copyright (c) 2022 Lucide Contributors
+Portions © 2013-2022 Cole Bemis (Feather, MIT)
+https://github.com/lucide-icons/lucide
+
+Ten icon paths copied verbatim into src/client/toolbar/icons.jsx.
+
+Full licence: licenses/lucide-ISC.txt
+--------------------------------------------------------------------------------

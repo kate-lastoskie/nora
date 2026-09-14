@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "outDir": "types",
+    "rootDir": "src"
+  },
+  /* Only the published surface. The client is served by Vite to a browser and
+     is never imported by a consumer, so emitting declarations for it would ship
+     types nobody can use. */
+  "include": ["src/index.js", "src/server/**/*.js"]
+}

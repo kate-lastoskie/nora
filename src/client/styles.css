@@ -1,0 +1,1264 @@
+/* =========================================================================
+   nora — client chrome
+
+   The canvas honours a light/dark toggle; the bar is always dark, the way a
+   piece of hardware sitting on top of the work would be.
+   ========================================================================= */
+
+@import "./fonts.css";
+
+.nora-app {
+  --nora-canvas: #f1f2f4;
+  --nora-canvas-ink: #14171c;
+  --nora-canvas-muted: #5c6672;
+  --nora-canvas-line: #d8dce1;
+  --nora-accent: #1b7da3;
+
+  /* The three colours the sweep speaks in: one for "this is wrong", one for
+     "this is a fact about your layout", one for "there was nothing to find".
+     Defined here because the panel is on the bar, which is always dark, so
+     they don't change with the canvas. The green is pitched to sit with the
+     other two rather than to announce itself — a clean sweep is the expected
+     outcome, not an achievement. */
+  --nora-flag: #f0a0a0;
+  --nora-flag-solid: #d76a6a;
+  --nora-note: #7cc4e2;
+  --nora-ok: #8ed3a9;
+
+  --nora-pill: #16181c;
+  --nora-pill-hi: #22262d;
+  --nora-pill-ink: #ffffff;
+  --nora-pill-soft: rgba(255, 255, 255, 0.1);
+  --nora-pill-soft-hi: rgba(255, 255, 255, 0.17);
+  --nora-pill-dim: rgba(255, 255, 255, 0.45);
+  --nora-pill-line: rgba(255, 255, 255, 0.08);
+
+  --nora-ease: cubic-bezier(0.19, 1, 0.22, 1);
+  --nora-shadow: 0 2px 8px rgba(0, 0, 0, 0.14), 0 12px 32px rgba(0, 0, 0, 0.16);
+
+  /* Geist and Geist Mono are bundled as inlined subsets — see fonts.css. The
+     fallbacks matter anyway: they cover the handful of glyphs the subset does
+     not carry, the macOS ⌘ and ⌥ among them. */
+  --nora-sans:
+    "Nora Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --nora-mono: "Nora Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.nora-app[data-theme="dark"] {
+  --nora-canvas: #101317;
+  --nora-canvas-ink: #e6e9ed;
+  --nora-canvas-muted: #8b95a2;
+  --nora-canvas-line: #262d36;
+  --nora-accent: #57add0;
+
+  /* The bar is always dark, but on a dark canvas "always dark" stops being a
+     silhouette and starts being camouflage — #16181c on #101317 is separated
+     by a drop shadow and nothing else. Lift the fill and add a hairline rim so
+     the chrome still reads as sitting *on top of* the work. */
+  --nora-pill: #1e2127;
+  --nora-pill-hi: #2a2e36;
+  --nora-pill-rim: rgba(255, 255, 255, 0.11);
+}
+
+html,
+body,
+#nora-root {
+  height: 100%;
+  margin: 0;
+}
+
+/* Scoped to our own chrome on purpose. A global `* { box-sizing: border-box }`
+   would silently change how a previewed component lays out compared to the
+   real app, which is the one thing this tool must never do. */
+.nora-bar-area,
+.nora-bar-area *,
+.nora-bar-area *::before,
+.nora-bar-area *::after,
+.nora-empty,
+.nora-empty * {
+  box-sizing: border-box;
+}
+
+.nora-app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--nora-canvas);
+  color: var(--nora-canvas-ink);
+  font-family: var(--nora-sans);
+  transition: background 0.25s ease;
+}
+
+/* ---------- canvas ---------- */
+
+.nora-canvas {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* ---------- viewport frame ---------- */
+
+.nora-viewport {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* At Fit the iframe fills the canvas edge to edge: no padding, no border, no
+   shadow. The frame document does its own centring, so a second layer of
+   padding out here would only push the component off-centre. */
+.nora-viewport[data-framed="true"] {
+  padding: 1.5rem 1.25rem;
+}
+
+/* Not inset: the frame is the canvas, so it gets the whole thing. */
+.nora-viewport[data-framed="false"] {
+  padding: 0;
+}
+
+.nora-frame-holder {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  transition: width 0.28s var(--nora-ease);
+}
+
+.nora-viewport[data-framed="true"] .nora-frame-holder {
+  border-radius: 10px;
+  border: 1px solid var(--nora-canvas-line);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.05),
+    0 10px 30px rgba(0, 0, 0, 0.07);
+}
+
+.nora-frame {
+  display: block;
+  border: 0;
+  background: transparent;
+}
+
+/* Covers the frame for the few seconds a sweep runs. The frame underneath
+   keeps laying out and painting — that is what the measurements read — but the
+   hundred width changes never reach the eye. */
+.nora-sweep-cover {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: var(--nora-canvas);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.7rem;
+  animation: nora-cover-in 0.18s ease both;
+}
+
+.nora-sweep-cover-label {
+  font-family: var(--nora-mono);
+  font-size: 0.74rem;
+  letter-spacing: 0.02em;
+  color: var(--nora-canvas-muted);
+  animation: nora-breathe 1.8s ease-in-out infinite;
+}
+
+/* The progress bar lives here, under the label, rather than inside the button
+   that started the sweep: once the canvas is covered, the bar is the one place
+   nobody is looking. */
+.nora-sweep-cover-track {
+  /* A shade wider than the label above it, so the two read as one block. */
+  width: 15rem;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--nora-canvas-line, rgb(128 128 128 / 0.25));
+  overflow: hidden;
+}
+
+.nora-sweep-cover-fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--nora-canvas-muted);
+  transform-origin: left center;
+  transform: scaleX(0);
+  transition: transform 0.12s linear;
+}
+
+@keyframes nora-cover-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes nora-breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Width transitions would lag a hundred steps behind the sweep. */
+.nora-viewport[data-sweeping="true"] .nora-frame-holder {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nora-sweep-cover,
+  .nora-sweep-cover-label {
+    animation: none;
+  }
+
+  .nora-sweep-cover-fill {
+    transition: none;
+  }
+}
+
+/* Nothing renders an error in *this* document — a component that throws does so
+   inside the frame, where the boundary lives, so the error surface is
+   `.noraf-error` in frame.css. */
+.nora-empty {
+  font-family: var(--nora-sans);
+  font-size: 0.84rem;
+  color: var(--nora-canvas-muted);
+  text-align: center;
+  line-height: 1.75;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  max-width: 46ch;
+  padding: 2.5rem;
+}
+
+.nora-empty-title {
+  color: var(--nora-canvas-ink);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  margin-bottom: 0.35rem;
+}
+
+.nora-empty-line {
+  font-size: 0.79rem;
+}
+
+/* =========================================================================
+   The bar
+
+   One silhouette, three clusters, buttons on top.
+
+   The dark shape is an SVG path drawn by bar-shape.js, not a background on any
+   of these elements. That is the load-bearing decision here: as separate
+   rounded boxes with painted bridges between them, the junctions showed a
+   hairline ridge at every zoom level, because two antialiased edges meeting on
+   one pixel never sum back to full opacity. A single filled path has no
+   interior edges to seam.
+
+   Everything below therefore describes only the *contents*. The clusters are
+   plain flex rows with padding; the shape wraps whatever boxes they end up
+   occupying, which is why changing the buttons here needs no change there.
+   ========================================================================= */
+
+.nora-bar-area {
+  position: fixed;
+  bottom: 1.25rem;
+  right: 1.25rem;
+  z-index: 2147483000;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+  font-family: var(--nora-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Anchored to whichever corner the bar was dragged nearest, so its panels
+   always open away from the edge rather than off the screen. */
+.nora-bar-area[data-vside="top"] {
+  flex-direction: column-reverse;
+}
+
+.nora-bar-area[data-hside="left"] {
+  align-items: flex-start;
+}
+
+.nora-bar-area[data-dragging="true"] {
+  cursor: grabbing;
+  user-select: none;
+}
+
+/* The frame must not swallow the pointer mid-drag. */
+.nora-bar-area[data-dragging="true"] ~ * iframe,
+.nora-app:has(.nora-bar-area[data-dragging="true"]) iframe {
+  pointer-events: none;
+}
+
+.nora-pill {
+  /* The expanded width. One number, one place. */
+  --nora-bar-w: 462px;
+
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 44px;
+  color: var(--nora-pill-ink);
+  cursor: grab;
+  transition: transform 0.2s var(--nora-ease);
+}
+
+/* No `transition: width` anywhere on the pill, deliberately. The silhouette is
+   an SVG path, and a path cannot be interpolated by the compositor — so a CSS
+   width transition here would animate the box while the shape jumped, and the
+   buttons would sit outside their own outline for the length of it. Opening and
+   shutting is driven from bar-shape.js instead, which writes this width and the
+   path together on the same frame. These two rules are the resting values it
+   hands back to. */
+.nora-pill[data-state="collapsed"] {
+  width: 44px;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.nora-pill[data-state="expanded"] {
+  width: var(--nora-bar-w);
+}
+
+/* ---------- the silhouette ---------- */
+
+.nora-shape {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: visible;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.16)) drop-shadow(0 12px 32px rgba(0, 0, 0, 0.18));
+  transition: filter 0.2s ease;
+}
+
+/* The rim rides the same path as the fill, so it is continuous by construction
+   — a border drawn round separate cluster elements is the seam problem all
+   over again. */
+.nora-shape path {
+  fill: var(--nora-pill);
+  stroke: var(--nora-pill-rim, transparent);
+  stroke-width: 1;
+  transition: fill 0.15s ease;
+}
+
+.nora-pill[data-state="collapsed"]:hover .nora-shape path {
+  fill: var(--nora-pill-hi);
+}
+
+.nora-pill[data-state="collapsed"]:active {
+  transform: scale(0.95);
+}
+
+.nora-bar-area[data-dragging="true"] .nora-shape {
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.22)) drop-shadow(0 18px 44px rgba(0, 0, 0, 0.24));
+}
+
+/* ---------- the two faces ---------- */
+
+/* Pinned to the held edge at exactly the shut bar's width, rather than
+   stretched across the pill: while the bar opens, the pill's width is changing
+   every frame, and an `inset: 0` face would drift left with it as it faded. */
+.nora-pill-face {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--nora-pill-dim);
+  transition:
+    opacity 0.14s var(--nora-ease),
+    color 0.15s ease;
+}
+
+.nora-pill[data-state="collapsed"]:hover .nora-pill-face {
+  color: var(--nora-pill-ink);
+}
+
+.nora-pill-face.is-out {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Absolutely positioned at the full expanded width and pinned to the edge the
+   bar opens and shuts against, so it is the same box in every state. That is
+   what lets the silhouette animate at all: the boxes feeding the path are
+   measured from these clusters, and if the container reflowed as the pill grew,
+   the flexible subject cluster would re-solve on every frame of the morph and
+   the path would be chasing a layout that was still settling.
+   Opacity is the only thing that changes here — composited, no layout, no
+   repaint of the subtree. The `filter: blur()` that used to sit on this element
+   animated a filter over live text on every frame of the expansion, next to a
+   path being rebuilt on those same frames, and was a large part of why opening
+   the bar stuttered. */
+.nora-pill-controls {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--nora-bar-w);
+  display: flex;
+  align-items: center;
+  transition: opacity 0.13s var(--nora-ease);
+}
+
+/* While the shape is morphing, opacity is written per frame from
+   bar-shape.js — on a squared curve, so the text is still nearly invisible
+   while the outline is narrow enough to crop it. A transition here would lag
+   those writes, and a live button hanging outside a half-open outline would
+   be clickable. */
+.nora-pill[data-morphing] .nora-pill-controls,
+.nora-pill[data-morphing] .nora-pill-face {
+  transition: none;
+  pointer-events: none;
+}
+
+.nora-pill-controls.is-out {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.nora-pill-controls.is-in {
+  opacity: 1;
+}
+
+/* ---------- clusters ---------- */
+
+.nora-cluster {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 5px;
+  flex: none;
+  min-width: 0;
+}
+
+/* The one that stretches: the component name has no natural width, and the
+   bar has a fixed one. */
+.nora-cluster-subject {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The gap a bridge spans. Empty on purpose — the bridge is drawn by the path;
+   this only reserves the space it curves through. */
+.nora-bridge {
+  flex: none;
+  width: 6px;
+}
+
+/* ---------- buttons ---------- */
+
+.nora-icon-btn,
+.nora-name-btn,
+.nora-vp-btn {
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  border: none;
+  background: transparent;
+  color: var(--nora-pill-ink);
+  font-family: var(--nora-sans);
+  cursor: pointer;
+  border-radius: 999px;
+  padding: 0;
+  transition:
+    background 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.nora-icon-btn {
+  width: 34px;
+  justify-content: center;
+  flex: none;
+}
+
+.nora-icon-btn:hover:not(:disabled),
+.nora-name-btn:hover:not(:disabled),
+.nora-vp-btn:hover:not(:disabled) {
+  background: var(--nora-pill-soft);
+}
+
+/* `:hover:not(:disabled)` is three simple selectors and would otherwise
+   out-specify a bare `.is-active`, so a button whose panel is open loses its
+   accent the moment the pointer is over it — which is exactly when you are
+   looking at it. Matching the hover state here is what keeps that from
+   happening; the brightness bump below is the hover feedback instead. */
+.nora-icon-btn.is-active,
+.nora-icon-btn.is-active:hover,
+.nora-vp-btn.is-active,
+.nora-vp-btn.is-active:hover {
+  background: var(--nora-accent);
+}
+
+.nora-icon-btn.is-active:hover,
+.nora-vp-btn.is-active:hover {
+  filter: brightness(1.14);
+}
+
+/* The name field is the widest thing on the bar, so accent-filling it while its
+   palette is open turns a third of the bar into a slab of blue and buries the
+   name it is meant to be showing. A held-down look is enough. */
+.nora-name-btn.is-active,
+.nora-name-btn.is-active:hover {
+  background: var(--nora-pill-soft-hi);
+}
+
+.nora-icon-btn:disabled,
+.nora-name-btn:disabled,
+.nora-vp-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.nora-name-btn {
+  flex: 1;
+  min-width: 0;
+  gap: 0.45rem;
+  padding: 0 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+}
+
+.nora-name-search {
+  flex: none;
+  opacity: 0.5;
+}
+
+.nora-name-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+/* Numbers are the one place the mono face earns its keep: tabular figures mean
+   the width doesn't jitter as it counts through a sweep. */
+.nora-vp-btn {
+  flex: none;
+  justify-content: center;
+  gap: 0.3rem;
+  min-width: 44px;
+  padding: 0 0.65rem;
+  font-family: var(--nora-mono);
+  font-size: 0.72rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Shown only when a preset is wider than the window and the frame is scaled
+   down — the one piece of viewport state the width alone can't tell you. */
+.nora-vp-scale {
+  font-size: 0.62rem;
+  color: var(--nora-pill-dim);
+}
+
+.nora-vp-btn.is-active .nora-vp-scale {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.nora-viewport-menu {
+  width: 220px;
+}
+
+.nora-row.is-current {
+  color: var(--nora-accent);
+}
+
+/* Where the keyboard cursor is, as distinct from which width is in use. The
+   panel takes focus itself so the arrows have somewhere to land, and this
+   highlight is the affordance, so the panel's own ring would only be noise. */
+.nora-row.is-at {
+  background: var(--nora-pill-soft);
+}
+
+.nora-viewport-menu:focus {
+  outline: none;
+}
+
+.nora-icon-btn:focus-visible,
+.nora-name-btn:focus-visible,
+.nora-vp-btn:focus-visible,
+.nora-pill:focus-visible,
+.nora-row:focus-visible,
+.nora-row-pick:focus-visible,
+.nora-palette-row:focus-visible,
+.nora-panel-close:focus-visible,
+.nora-panel-up:focus-visible {
+  outline: 2px solid var(--nora-accent);
+  outline-offset: 2px;
+}
+
+/* Drawn inside: the palette input spans the full popover, so an outset ring
+   would be clipped by the viewport edge the bar is anchored to. */
+.nora-palette-input:focus-visible {
+  outline: 2px solid var(--nora-accent);
+  outline-offset: -2px;
+}
+
+/* ---------- shared popover surface ---------- */
+
+.nora-panel,
+.nora-palette {
+  width: 384px;
+  max-width: calc(100vw - 2.5rem);
+  background: var(--nora-pill);
+  color: var(--nora-pill-ink);
+  border-radius: 18px;
+  box-shadow: var(--nora-shadow);
+  padding: 0.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  animation: nora-rise 0.24s var(--nora-ease);
+  transform-origin: bottom right;
+}
+
+/* Same reason as the bar's rim: on a dark canvas a dark popover needs an edge. */
+.nora-app[data-theme="dark"] .nora-panel,
+.nora-app[data-theme="dark"] .nora-palette {
+  box-shadow:
+    var(--nora-shadow),
+    inset 0 0 0 1px var(--nora-pill-rim);
+}
+
+.nora-bar-area[data-vside="top"] .nora-panel,
+.nora-bar-area[data-vside="top"] .nora-palette {
+  transform-origin: top right;
+  animation-name: nora-drop;
+}
+
+.nora-bar-area[data-hside="left"] .nora-panel,
+.nora-bar-area[data-hside="left"] .nora-palette {
+  transform-origin: bottom left;
+}
+
+.nora-bar-area[data-vside="top"][data-hside="left"] .nora-panel,
+.nora-bar-area[data-vside="top"][data-hside="left"] .nora-palette {
+  transform-origin: top left;
+}
+
+@keyframes nora-drop {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes nora-rise {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.nora-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.45rem 0.6rem 0.35rem;
+}
+
+.nora-panel-title {
+  font-family: var(--nora-mono);
+  font-size: 0.63rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--nora-pill-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nora-panel-up {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border: none;
+  background: var(--nora-pill-soft);
+  color: var(--nora-pill-ink);
+  font-family: var(--nora-sans);
+  font-size: 0.68rem;
+  padding: 0.2rem 0.45rem;
+  border-radius: 7px;
+  cursor: pointer;
+  flex: none;
+}
+
+.nora-panel-up:hover {
+  background: var(--nora-pill-soft-hi);
+}
+
+.nora-panel-body,
+.nora-palette-list {
+  max-height: min(46vh, 340px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.nora-row-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.nora-row {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.6rem;
+  border: none;
+  border-radius: 9px;
+  background: none;
+  color: var(--nora-pill-ink);
+  font-family: var(--nora-sans);
+  font-size: 0.8rem;
+  letter-spacing: -0.005em;
+  text-align: left;
+  cursor: pointer;
+}
+
+.nora-row:hover:not(:disabled) {
+  background: var(--nora-pill-soft);
+}
+
+.nora-row:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.nora-row svg {
+  flex: none;
+  opacity: 0.55;
+}
+
+.nora-row-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nora-row-count {
+  flex: none;
+  font-family: var(--nora-mono);
+  font-size: 0.66rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--nora-pill-dim);
+}
+
+.nora-row-primary {
+  color: var(--nora-accent);
+}
+
+.nora-row-pick {
+  flex: none;
+  border: none;
+  background: var(--nora-pill-soft);
+  color: var(--nora-pill-ink);
+  font-family: var(--nora-sans);
+  font-size: 0.66rem;
+  padding: 0.28rem 0.5rem;
+  border-radius: 7px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.nora-row-wrap:hover .nora-row-pick,
+.nora-row-pick:focus-visible {
+  opacity: 1;
+}
+
+.nora-row-pick:hover {
+  background: var(--nora-accent);
+}
+
+.nora-panel-empty,
+.nora-panel-error {
+  padding: 0.8rem 0.6rem;
+  font-size: 0.76rem;
+  color: var(--nora-pill-dim);
+  text-align: center;
+  line-height: 1.5;
+}
+
+.nora-panel-error {
+  color: var(--nora-flag);
+  text-align: left;
+}
+
+.nora-panel-close {
+  border: none;
+  background: none;
+  color: var(--nora-pill-dim);
+  font-family: var(--nora-sans);
+  font-size: 0.68rem;
+  padding: 0.4rem;
+  cursor: pointer;
+  border-top: 1px solid var(--nora-pill-line);
+  /* Same balance as .nora-sweep-actions: the button's own 0.4rem sits below the
+     rule, so the space above it has to match that, not the old 0.15rem. */
+  margin-top: 0.4rem;
+}
+
+.nora-panel-close:hover {
+  color: var(--nora-pill-ink);
+}
+
+/* ---------- palette ---------- */
+
+.nora-palette-input {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: var(--nora-pill-soft);
+  color: var(--nora-pill-ink);
+  font-family: var(--nora-sans);
+  font-size: 0.82rem;
+  letter-spacing: -0.005em;
+  padding: 0.55rem 0.7rem;
+  border-radius: 11px;
+  margin-bottom: 0.25rem;
+}
+
+.nora-palette-input::placeholder {
+  color: var(--nora-pill-dim);
+}
+
+.nora-palette-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: none;
+  border-radius: 9px;
+  background: none;
+  color: var(--nora-pill-ink);
+  font-family: var(--nora-sans);
+  font-size: 0.8rem;
+  letter-spacing: -0.005em;
+  text-align: left;
+  cursor: pointer;
+}
+
+.nora-palette-row.is-active {
+  background: var(--nora-pill-soft);
+}
+
+.nora-palette-row.is-selected .nora-palette-name {
+  color: var(--nora-accent);
+}
+
+.nora-palette-row.is-unsupported {
+  opacity: 0.55;
+}
+
+.nora-palette-name {
+  flex: none;
+  font-weight: 500;
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A file path is a path: the mono face is doing real work here, not styling. */
+.nora-palette-path {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--nora-mono);
+  font-size: 0.65rem;
+  color: var(--nora-pill-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+}
+
+/* ---------- picker: folders sitting alongside components ---------- */
+
+/* Where you are. The list holds two kinds of thing and the folder rows are all
+   relative to this path, so it has to be on screen — but it is context rather
+   than a result, so it sits between the input and the list instead of in it. */
+.nora-picker-where {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.35rem 0.6rem 0.2rem;
+  font-family: var(--nora-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.04em;
+  color: var(--nora-pill-dim);
+}
+
+.nora-picker-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nora-picker-pending {
+  flex: none;
+  color: var(--nora-accent);
+}
+
+/* The rule between what is *in* this folder and what is *next to* it. At this
+   row density a plain gap reads as a rendering accident rather than a divide. */
+.nora-picker-break {
+  margin-top: 0.3rem;
+  padding-top: 0.3rem;
+  border-top: 1px solid var(--nora-pill-line);
+}
+
+/* Folder rows carry an icon, so they centre rather than sitting on the baseline
+   that the component rows share with their file names. */
+.nora-picker-dir {
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.nora-picker-dir svg {
+  flex: none;
+  color: var(--nora-pill-dim);
+}
+
+/* A folder name has no file path beside it to yield room to, so unlike a
+   component name it takes the whole row and pushes the count to the edge. */
+.nora-picker-dir .nora-palette-name {
+  flex: 1;
+  max-width: none;
+}
+
+.nora-picker-dir:hover:not(:disabled) {
+  background: var(--nora-pill-soft);
+}
+
+.nora-picker-dir:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* The one row that lands you somewhere when you have browsed away from the
+   scanned folder, so it carries the accent the way a primary action should. */
+.nora-picker-open .nora-palette-name,
+.nora-picker-open svg {
+  color: var(--nora-accent);
+}
+
+.nora-picker-count {
+  flex: none;
+  margin-left: auto;
+  font-family: var(--nora-mono);
+  font-size: 0.62rem;
+  color: var(--nora-pill-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.nora-palette-foot {
+  display: flex;
+  flex-wrap: wrap;
+  row-gap: 0.3rem;
+  gap: 0.9rem;
+  padding: 0.5rem 0.6rem 0.25rem;
+  border-top: 1px solid var(--nora-pill-line);
+  margin-top: 0.2rem;
+  font-size: 0.64rem;
+  color: var(--nora-pill-dim);
+}
+
+.nora-palette-foot kbd {
+  font-family: var(--nora-mono);
+  background: var(--nora-pill-soft);
+  border-radius: 4px;
+  padding: 0.05rem 0.28rem;
+  margin-right: 0.15rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nora-pill,
+  .nora-pill-face,
+  .nora-pill-controls,
+  .nora-panel,
+  .nora-palette,
+  .nora-app {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
+/* ==========================================================================
+   Sweep — a popover on the bar, sharing the .nora-panel surface
+   ========================================================================== */
+
+.nora-sweep-btn {
+  position: relative;
+  overflow: hidden;
+}
+
+.nora-sweep-btn.is-running {
+  background: var(--nora-accent);
+}
+
+.nora-sweep-panel {
+  gap: 0.1rem;
+}
+
+.nora-sweep-summary {
+  display: flex;
+  gap: 0.6rem;
+  font-family: var(--nora-mono);
+  font-size: 0.65rem;
+  margin-left: auto;
+}
+
+.nora-sweep-bad {
+  color: var(--nora-flag);
+  font-weight: 600;
+}
+.nora-sweep-neutral {
+  color: var(--nora-note);
+}
+/* The one line carrying the verdict, previously the same --nora-pill-dim as
+   every other muted label here — so the result read as chrome. */
+.nora-sweep-ok {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  color: var(--nora-ok);
+}
+
+/* Every width passed, so the whole track says so. This is the same grammar as
+   an overflow band two notches quieter: the sweep already speaks in bands, and
+   a clean run is simply the band that covers the entire range. It also stops
+   the axis reading as an empty widget on the one result that has no findings
+   to plot. */
+.nora-sweep-axis[data-clean="true"] .nora-sweep-track {
+  background: linear-gradient(
+    90deg,
+    rgba(142, 211, 169, 0.16),
+    rgba(142, 211, 169, 0.34) 50%,
+    rgba(142, 211, 169, 0.16)
+  );
+}
+
+/* The axis is the point: a finding lives at a width, so it belongs on a ruler. */
+.nora-sweep-axis {
+  position: relative;
+  height: 30px;
+  margin: 0.2rem 0.6rem 0;
+  cursor: crosshair;
+}
+
+/* Of those 30px, 21 sit above the track and exist only to hold tick labels. A
+   sweep that found no breakpoints has no labels to put there, so the space
+   became a hole directly beneath the heading. Keep just enough for the track. */
+.nora-sweep-axis[data-ticks="false"] {
+  height: 21px;
+}
+
+.nora-sweep-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 6px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.nora-sweep-band {
+  position: absolute;
+  bottom: 4px;
+  height: 7px;
+  border-radius: 2px;
+  background: var(--nora-flag-solid);
+}
+
+.nora-sweep-tick {
+  position: absolute;
+  bottom: 3px;
+  width: 1px;
+  height: 12px;
+  background: var(--nora-note);
+}
+
+.nora-sweep-tick-label {
+  position: absolute;
+  bottom: 13px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--nora-mono);
+  font-size: 0.6rem;
+  color: var(--nora-note);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.nora-sweep-cursor {
+  position: absolute;
+  bottom: 1px;
+  width: 2px;
+  height: 16px;
+  background: var(--nora-pill-ink);
+  border-radius: 1px;
+}
+
+/* The axis and its end labels are one object, so they sit tight together; the
+   findings are a separate readout and need to look like one. At the panel's
+   0.1rem gap the first finding read as a third scale label. */
+.nora-sweep-panel .nora-panel-body {
+  margin-top: 0.45rem;
+}
+
+.nora-sweep-scale {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 0.6rem;
+  font-family: var(--nora-mono);
+  font-size: 0.58rem;
+  color: var(--nora-pill-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.nora-finding {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  width: 100%;
+  border: none;
+  background: none;
+  border-radius: 9px;
+  padding: 0.4rem 0.6rem;
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--nora-sans);
+  font-size: 0.76rem;
+  color: var(--nora-pill-ink);
+}
+
+.nora-finding:hover {
+  background: var(--nora-pill-soft);
+}
+
+.nora-finding-range {
+  flex: none;
+  min-width: 4.8rem;
+  font-family: var(--nora-mono);
+  color: var(--nora-note);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.69rem;
+}
+
+.nora-finding.is-bad .nora-finding-range {
+  color: var(--nora-flag);
+  font-weight: 600;
+}
+
+.nora-finding-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.72rem;
+  color: var(--nora-pill-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Deliberately not .nora-panel-empty. An empty findings list is the *good*
+   outcome here rather than a nothing-to-show state, and the summary in the head
+   now does the announcing, so this line is elaboration and is weighted as such.
+   Shorter, too: the range is already stated twice above it, and at the old
+   length it wrapped and orphaned "1600." onto a line of its own. */
+.nora-sweep-clear {
+  padding: 0.55rem 0.6rem 0.7rem;
+  font-size: 0.72rem;
+  color: var(--nora-pill-dim);
+  text-align: center;
+  line-height: 1.5;
+}
+
+/* Equal air on both sides of the button text, measured to the two edges the
+   eye actually reads: the rule above, the panel's own rounded edge below.
+   Each side is this row's 0.4rem plus the button's own 0.4rem of padding —
+   6.4 + 6.4 above the glyphs, and 6.4 plus the panel's 0.4rem below them.
+   Add nothing here without taking it off the panel. */
+.nora-sweep-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  border-top: 1px solid var(--nora-pill-line);
+  margin-top: 0.5rem;
+  padding-top: 0.4rem;
+}
+
+.nora-sweep-rerun,
+.nora-sweep-copy,
+.nora-sweep-dismiss {
+  flex: 1;
+  border: none;
+  background: none;
+  color: var(--nora-pill-dim);
+  font-family: var(--nora-sans);
+  font-size: 0.68rem;
+  padding: 0.4rem;
+  cursor: pointer;
+  border-radius: 7px;
+}
+
+.nora-sweep-rerun:hover:not(:disabled),
+.nora-sweep-copy:hover,
+.nora-sweep-dismiss:hover {
+  color: var(--nora-pill-ink);
+  background: var(--nora-pill-soft);
+}
+
+.nora-sweep-rerun:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.nora-sweep-dismiss {
+  border-top: none;
+  margin-top: 0;
+}
