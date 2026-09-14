@@ -6,7 +6,7 @@
   "license": "MIT",
   "author": "Kate Zirotti",
   "bin": {
-    "nora": "./src/cli.js"
+    "nora": "src/cli.js"
   },
   "exports": {
     ".": {
