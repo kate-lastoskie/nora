@@ -108,12 +108,6 @@ npm run check    # lint, format, types, tests. What CI runs.
 `Counter` that calls `useState`. If `Counter` throws "invalid hook call", two
 copies of React are loaded.
 
-## Notes
-
-[NOTES.md](NOTES.md) covers how the bar is drawn, why the preview lives in an
-iframe, how the sweep avoids false positives, and how components are found
-without executing them.
-
 ## License
 
 MIT. See [NOTICE](NOTICE) for the bundled Geist and Lucide licenses.
