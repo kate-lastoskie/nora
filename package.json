@@ -4,6 +4,7 @@
   "description": "A floating bar that switches your app between components. Point it at a folder.",
   "type": "module",
   "license": "MIT",
+  "author": "Kate Zirotti",
   "bin": {
     "nora": "./src/cli.js"
   },
