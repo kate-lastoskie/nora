@@ -2,7 +2,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createServer, loadConfigFromFile, mergeConfig } from "vite";
-import { nora } from "./plugin.js";
+import { nora, outsideRoots } from "./plugin.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const CLIENT_DIR = path.resolve(here, "../client");
@@ -92,7 +92,8 @@ export async function createPreviewServer({ root, port = 5199, dir = null }) {
         // Our client lives outside the project root, so Vite has to be allowed
         // to serve it. Workspace roots come along via `searchForWorkspaceRoot`
         // in Vite's own defaults.
-        allow: [root, CLIENT_DIR, path.resolve(CLIENT_DIR, "..", "..")],
+        // A `--dir` outside the project has to be allowed the same way.
+        allow: [root, CLIENT_DIR, path.resolve(CLIENT_DIR, "..", ".."), ...outsideRoots(root, dir)],
       },
     },
   };

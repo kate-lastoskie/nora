@@ -201,6 +201,23 @@ export function pickEntry({ entries, imports, folder, override }) {
 }
 
 /**
+ * The specifier the registry uses to import a scanned file.
+ *
+ * Root-relative for files in the project. A file outside it (a `--dir` that
+ * points at a sibling folder) gets Vite's `/@fs/` form instead, since a
+ * `/../` URL is normalised away by the browser before Vite ever sees it.
+ *
+ * @param {string} root    absolute project root
+ * @param {string} file    absolute file path
+ * @param {string} relFile file relative to root, forward slashes
+ */
+export function importUrl(root, file, relFile) {
+  if (!relFile.startsWith("../")) return "/" + relFile;
+  const posix = file.split(path.sep).join("/");
+  return "/@fs" + (posix.startsWith("/") ? "" : "/") + posix;
+}
+
+/**
  * Turn a directory into a flat list of registry entries — one per exported
  * component, not one per file — plus which of them is the folder's own design.
  *
@@ -229,7 +246,7 @@ export async function scanDirectory({ root, dir, include, exclude, entry }) {
   for (const file of files) {
     const { exports, imports: fileImports, isServerOnly, error } = await readExports(file);
     const relFile = path.relative(root, file).split(path.sep).join("/");
-    const url = "/" + relFile;
+    const url = importUrl(root, file, relFile);
     const base = path.basename(file).replace(/\.(tsx|jsx|ts|js)$/, "");
     const group = path.relative(dir, path.dirname(file)).split(path.sep).filter(Boolean).join("/");
 

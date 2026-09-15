@@ -105,6 +105,11 @@ npm i vite @vitejs/plugin-react react react-dom vite-plugin-nora
 npx vite-plugin-nora . --dir ../path/to/components
 ```
 
+The components folder doesn't need a package.json of its own. Install whatever
+its files import (`clsx`, `@radix-ui/*`, …) into the host, and nora resolves
+those imports from there. The picker can browse inside that folder but not
+above it.
+
 Making nora self-contained, so it runs against any folder with no host at all,
 is planned for 0.2.0.
 

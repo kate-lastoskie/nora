@@ -63,6 +63,8 @@ export function Picker({ entries, currentDir, selectedId, onPick, onClose }) {
   const [query, setQuery] = useState("");
   const [cursor, setCursor] = useState(0);
   const [dirs, setDirs] = useState(null);
+  // True when the server says this folder is as high as nora may browse.
+  const [top, setTop] = useState(false);
   const [error, setError] = useState(null);
   const [pending, setPending] = useState(false);
   const inputRef = useRef(null);
@@ -74,7 +76,7 @@ export function Picker({ entries, currentDir, selectedId, onPick, onClose }) {
   // way — only Enter commits, and only committing reloads.
   const home = currentDir ?? "";
   const [browse, setBrowse] = useState(home);
-  const parent = browse ? browse.split("/").slice(0, -1).join("/") : null;
+  const parent = browse && !top ? browse.split("/").slice(0, -1).join("/") : null;
   const atHome = browse === home;
 
   useEffect(() => {
@@ -94,7 +96,10 @@ export function Picker({ entries, currentDir, selectedId, onPick, onClose }) {
         // body is a synchronous setState during an effect, and a cascading
         // render for a value that is almost always already null.
         setError(json.error ?? null);
-        if (!json.error) setDirs(json.dirs);
+        if (!json.error) {
+          setDirs(json.dirs);
+          setTop(Boolean(json.top));
+        }
       })
       .catch((err) => !cancelled && setError(String(err.message ?? err)));
     return () => {

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
-import { safeResolve, isLoopbackHost } from "../src/server/safe-path.js";
+import { safeResolve, isInside, isLoopbackHost } from "../src/server/safe-path.js";
 
 const ROOT = "/projects/app";
 
@@ -43,4 +43,19 @@ test("refuses non-loopback hosts", () => {
     assert.equal(isLoopbackHost({ headers: { host } }), false, host);
   }
   assert.equal(isLoopbackHost({ headers: {} }), false);
+});
+
+test("an extra root can be browsed, but nothing above it", () => {
+  const extra = "/projects/components";
+  assert.equal(safeResolve(ROOT, "../components", [extra]), extra);
+  assert.equal(safeResolve(ROOT, "../components/cards", [extra]), path.join(extra, "cards"));
+  for (const bad of ["..", "../other", "../components/../other", "/etc"]) {
+    assert.throws(() => safeResolve(ROOT, bad, [extra]), /escapes project root/, bad);
+  }
+});
+
+test("a sibling whose name starts with the root's is not inside it", () => {
+  assert.throws(() => safeResolve(ROOT, "../app-secrets"), /escapes project root/);
+  assert.equal(isInside("/projects/app", "/projects/app-secrets"), false);
+  assert.equal(isInside("/projects/app", "/projects/app"), true);
 });

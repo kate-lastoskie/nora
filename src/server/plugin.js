@@ -1,10 +1,32 @@
 import path from "node:path";
 import fs from "node:fs";
 import { clientEntry, scanDirectory, listDirectories } from "./scan.js";
-import { safeResolve, isLoopbackHost } from "./safe-path.js";
+import { safeResolve, isInside, isLoopbackHost } from "./safe-path.js";
 
 const VIRTUAL_ID = "virtual:nora/registry";
 const RESOLVED_ID = "\0" + VIRTUAL_ID;
+
+/**
+ * A bare package specifier: "react", "@scope/pkg/sub". Not relative, not
+ * absolute, not virtual, and not a `node:` or `virtual:` style id.
+ *
+ * @param {string} id
+ */
+export const isBareImport = (id) => /^[^./\0]/.test(id) && !id.includes(":");
+
+/**
+ * The folders outside the project root that nora may serve: at most the one
+ * `--dir` names, and only when it really is outside.
+ *
+ * @param {string} root
+ * @param {string|null} dir
+ * @returns {string[]}
+ */
+export function outsideRoots(root, dir) {
+  if (!dir) return [];
+  const abs = path.resolve(root, dir);
+  return isInside(root, abs) ? [] : [abs];
+}
 
 const CONFIG_NAMES = ["nora.config.tsx", "nora.config.ts", "nora.config.jsx", "nora.config.js"];
 
@@ -74,12 +96,23 @@ export function nora({ root, initialDir = null }) {
   let userConfig = {};
 
   const configFile = findConfigFile(root);
+  const extraRoots = outsideRoots(root, initialDir);
+  const rootImporter = path.join(root, "index.html");
 
   return {
     name: "nora",
 
-    resolveId(id) {
+    async resolveId(id, importer, options) {
       if (id === VIRTUAL_ID) return RESOLVED_ID;
+
+      // Vite looks for packages by walking up from the importing file. A
+      // component in a folder outside the project, with no node_modules of its
+      // own, finds nothing, even though the project has the package installed.
+      // Vite's own resolver runs before this hook, so reaching here means it
+      // already failed: try once more as if the import came from the root.
+      if (importer && path.isAbsolute(importer) && isBareImport(id) && !isInside(root, importer)) {
+        return this.resolve(id, rootImporter, { ...options, skipSelf: true });
+      }
       return null;
     },
 
@@ -169,13 +202,16 @@ export function nora({ root, initialDir = null }) {
         guard(async (req, res) => {
           const url = new URL(req.url ?? "/", "http://localhost");
           const rel = url.searchParams.get("path") ?? "";
-          const abs = safeResolve(root, rel);
+          const abs = safeResolve(root, rel, extraRoots);
           const dirs = await listDirectories(abs);
           const relNorm = path.relative(root, abs).split(path.sep).join("/");
+          // An outside folder is as far up as the picker can go. Saying so
+          // lets it hide its up row instead of offering a step that is refused.
+          const top = extraRoots.some((dir) => path.relative(dir, abs) === "");
           // No `parent`: the picker needs it synchronously to draw its up row,
           // and derives it from the path it already holds with exactly this
           // logic. Sending it only made the endpoint wider.
-          sendJson(res, 200, { path: relNorm, dirs });
+          sendJson(res, 200, { path: relNorm, dirs, top });
         }),
       );
 
@@ -184,7 +220,7 @@ export function nora({ root, initialDir = null }) {
         "/__nora/scan",
         guard(async (req, res) => {
           const body = await readJson(req);
-          const abs = safeResolve(root, body.path ?? "");
+          const abs = safeResolve(root, body.path ?? "", extraRoots);
           currentDir = path.relative(root, abs).split(path.sep).join("/");
 
           const mod = server.moduleGraph.getModuleById(RESOLVED_ID);
