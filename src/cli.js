@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 import path from "node:path";
 import process from "node:process";
+import { createRequire } from "node:module";
 import pc from "picocolors";
 import { createPreviewServer, findProjectRoot } from "./server/create-server.js";
+
+// Read from package.json so the banner can never drift from the real version.
+const { version } = createRequire(import.meta.url)("../package.json");
 
 const HELP = `
 ${pc.bold("nora")} — a floating bar that switches your app between components
@@ -17,8 +21,13 @@ ${pc.dim("Options")}
   --help          show this
 
 ${pc.dim("Examples")}
-  nora
-  nora ./apps/web --dir src/components --open
+  npx vite-plugin-nora
+  npx vite-plugin-nora ./apps/web --dir src/components --open
+
+${pc.dim("Note")}
+  Invoke it as ${pc.bold("vite-plugin-nora")}. The bare name ${pc.bold("nora")} belongs to a
+  different package on npm, so ${pc.dim("npx nora")} only reaches this one when it
+  is already installed in the project you are standing in.
 `;
 
 function parseArgs(argv) {
@@ -63,7 +72,7 @@ async function main() {
   });
 
   console.log("");
-  console.log(`  ${pc.bold(pc.cyan("nora"))}  ${pc.dim("v0.1.0")}`);
+  console.log(`  ${pc.bold(pc.cyan("nora"))}  ${pc.dim(`v${version}`)}`);
   console.log("");
   console.log(`  ${pc.dim("project")}  ${root}`);
   console.log(

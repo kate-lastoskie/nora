@@ -14,9 +14,13 @@ npm i -D vite-plugin-nora
 ## Usage
 
 ```bash
-npx nora                                # current directory
-npx nora ./apps/web --dir src/ui --open
+npx vite-plugin-nora                                # current directory
+npx vite-plugin-nora ./apps/web --dir src/ui --open
 ```
+
+Invoke it as `vite-plugin-nora`. The binary it installs is called `nora`, but the
+bare name `nora` on npm belongs to an unrelated package, so `npx nora` only
+reaches this one from inside a project that already has it installed.
 
 ```
 --dir <path>    folder to open on boot, relative to the project
@@ -83,6 +87,26 @@ These work even when focus is inside the preview.
 - A project Vite can serve. Webpack and Next.js projects often work, but custom
   loaders and Webpack aliases will not.
 - Desktop browsers.
+
+nora runs inside a host project rather than standing on its own. It boots a Vite
+dev server rooted in the project you point it at and borrows that project's
+`vite`, `react`, `react-dom` and JSX plugin, which is what lets your aliases and
+config work unchanged. Pointed at a folder with no Vite project around it, the
+server starts but nothing renders: the toolbar is itself React.
+
+So the target needs `vite`, `react`, `react-dom` and `@vitejs/plugin-react`
+installed. Any app created by `npm create vite@latest` already has all four. If
+you only have a folder of components, the smallest host is:
+
+```bash
+mkdir preview && cd preview
+npm init -y && npm pkg set type=module
+npm i vite @vitejs/plugin-react react react-dom vite-plugin-nora
+npx vite-plugin-nora . --dir ../path/to/components
+```
+
+Making nora self-contained, so it runs against any folder with no host at all,
+is planned for 0.2.0.
 
 ## Known gaps
 
