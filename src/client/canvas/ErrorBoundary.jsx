@@ -1,4 +1,5 @@
 import { Component } from "react";
+import { diagnose } from "./diagnose.js";
 
 /**
  * A component rendered outside its app will often throw — a missing provider,
@@ -33,24 +34,4 @@ export class ErrorBoundary extends Component {
       </div>
     );
   }
-}
-
-/** Turn the common failure modes into something actionable. */
-function diagnose(message) {
-  if (/invalid hook call/i.test(message)) {
-    return "Two copies of React are loaded. Check that react and react-dom resolve to one instance — this is what resolve.dedupe is for.";
-  }
-  if (/cannot read propert(y|ies) of (undefined|null)/i.test(message)) {
-    return "Often a missing prop, or a context this component expects. Add a wrapper in nora.config to supply your providers, or give it props once the controls panel exists.";
-  }
-  if (/useContext|context/i.test(message)) {
-    return "This component reads a React context that isn't present. Wrap it via the wrapper option in nora.config.";
-  }
-  if (/useNavigate|useLocation|useRouter|router/i.test(message)) {
-    return "This component needs a router. Put your router provider in the wrapper option in nora.config.";
-  }
-  if (/is not a function/i.test(message)) {
-    return "A prop this component calls wasn't passed. Until the controls panel lands, a wrapper that supplies defaults is the workaround.";
-  }
-  return null;
 }
