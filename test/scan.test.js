@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { scanDirectory, listDirectories } from "../src/server/scan.js";
+import { scanDirectory, listDirectories, listFiles } from "../src/server/scan.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(here, "../fixtures/demo-app");
@@ -23,8 +23,53 @@ test("skips exports that are not component-shaped", async () => {
   assert.ok(!names.includes("buttonStyles"), "lowercase export should be filtered out");
 });
 
-test("recurses into subfolders and records the group", async () => {
+test("lists only the folder's own components by default, like a directory listing", async () => {
   const { entries } = await scanDirectory({ root: ROOT, dir: path.join(ROOT, "src/ui") });
+  const names = entries.map((e) => e.name);
+  assert.ok(names.includes("Counter"), "own component missing");
+  assert.ok(!names.includes("TextField"), "a subfolder's component leaked into the listing");
+  assert.ok(
+    entries.every((e) => e.group === ""),
+    "a one-level scan has no groups",
+  );
+});
+
+test("still finds the design when its parts live in a subfolder", async () => {
+  // Aside sorts first and imports nothing; Flow composes ./components/*.
+  const { entries, entryId, designId } = await scanDirectory({
+    root: ROOT,
+    dir: path.join(ROOT, "src/projects/checkout"),
+  });
+  assert.deepEqual(entries.map((e) => e.name).sort(), ["Aside", "Flow"]);
+  assert.equal(entryId, "src/projects/checkout/Flow.jsx#Flow");
+  assert.equal(designId, entryId, "a composing file is the folder's design");
+});
+
+test("a folder of loose parts lands somewhere but claims no design", async () => {
+  const { entryId, designId } = await scanDirectory({
+    root: ROOT,
+    dir: path.join(ROOT, "src/projects/checkout/components"),
+  });
+  assert.equal(entryId, "src/projects/checkout/components/CartLine.jsx#CartLine");
+  assert.equal(designId, null);
+});
+
+test("a folder of projects lists no components, only its folders", async () => {
+  const { entries } = await scanDirectory({ root: ROOT, dir: path.join(ROOT, "src/projects") });
+  assert.equal(entries.length, 0);
+  const dirs = await listDirectories(path.join(ROOT, "src/projects"));
+  assert.deepEqual(
+    dirs.map((d) => d.name),
+    ["checkout", "onboarding"],
+  );
+});
+
+test("recursive: true lists every subfolder and records the group", async () => {
+  const { entries } = await scanDirectory({
+    root: ROOT,
+    dir: path.join(ROOT, "src/ui"),
+    recursive: true,
+  });
   const textField = entries.find((e) => e.name === "TextField");
   assert.ok(textField, "nested component missing");
   assert.equal(textField.group, "forms");
@@ -51,6 +96,14 @@ test("honours an extra exclude list", async () => {
     exclude: ["**/Counter.jsx"],
   });
   assert.ok(!entries.some((e) => e.name === "Counter"), "exclude was ignored");
+});
+
+test("listFiles finds every candidate below a folder, for search", async () => {
+  const files = await listFiles({ dir: path.join(ROOT, "src/projects") });
+  const rel = files.map((f) => path.relative(ROOT, f).split(path.sep).join("/"));
+  assert.ok(rel.includes("src/projects/checkout/components/Total.jsx"), "nested file missing");
+  assert.ok(rel.includes("src/projects/onboarding/Welcome.jsx"), "sibling project missing");
+  assert.deepEqual(rel, [...rel].sort(), "should be sorted");
 });
 
 test("counts components per directory for the picker", async () => {

@@ -173,3 +173,19 @@ test("survives being handed an entry that could not be parsed", () => {
   const e = clientEntry({ ...scanned, unsupported: "Could not parse: boom" });
   assert.equal(e.unsupported, "Could not parse: boom");
 });
+
+test("imports into files outside the entries still mark the design", () => {
+  // Scanned one level deep: the parts are known files but not entries.
+  const entries = [entry("app/Aside.jsx", "Aside"), entry("app/Flow.jsx", "Flow")];
+  const imports = new Map([
+    ["app/Aside.jsx", ["react"]],
+    ["app/Flow.jsx", ["./components/CartLine", "./components/Total.jsx"]],
+  ]);
+  const known = ["app/components/CartLine.jsx", "app/components/Total.jsx"];
+  assert.equal(pickEntry({ entries, imports, folder: "x", known }), "app/Flow.jsx#Flow");
+  assert.equal(
+    pickEntry({ entries, imports, folder: "x" }),
+    "app/Aside.jsx#Aside",
+    "without the known files the import is invisible",
+  );
+});

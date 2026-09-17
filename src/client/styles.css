@@ -1262,3 +1262,16 @@ body,
   border-top: none;
   margin-top: 0;
 }
+
+/* Marks the file that composes the rest of its folder. Quiet on purpose: it
+   is a hint about the list, not a second name. */
+.nora-picker-tag {
+  flex: none;
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+  font-size: 0.58rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--nora-accent);
+  background: var(--nora-pill-soft);
+}

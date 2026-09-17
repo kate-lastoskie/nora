@@ -13,6 +13,30 @@ export function readSelectionFromUrl() {
   return new URLSearchParams(location.search).get("c");
 }
 
+/**
+ * Which entry a stored selection means.
+ *
+ * Usually an exact id. A bare file path (no `#`) comes from search, which finds
+ * files before anything has read their exports: it means that file's default
+ * export if it has one, else its first component.
+ *
+ * @template {{ id: string, file: string, exportName: string, unsupported?: string | null }} E
+ * @param {E[]} entries
+ * @param {string | null} wanted
+ * @returns {string | null}
+ */
+export function resolveSelection(entries, wanted) {
+  if (!wanted) return null;
+  if (entries.some((e) => e.id === wanted)) return wanted;
+  if (wanted.includes("#")) return null;
+  const inFile = entries.filter((e) => e.file === wanted);
+  const pick =
+    inFile.find((e) => e.exportName === "default" && !e.unsupported) ??
+    inFile.find((e) => !e.unsupported) ??
+    inFile[0];
+  return pick?.id ?? null;
+}
+
 /** @param {string | null} id */
 export function writeSelectionToUrl(id) {
   const url = new URL(location.href);

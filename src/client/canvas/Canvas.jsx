@@ -49,9 +49,9 @@ export const Canvas = forwardRef(
     if (entryCount === 0) {
       return (
         <Empty
-          title="No Components Found"
+          title="No Components Here"
           lines={[
-            `Nothing in ${currentDir} matched.`,
+            `${currentDir} has no components of its own. Press ⌘K to open one of its folders.`,
             "Index files and tests are skipped by default — adjust include/exclude in nora.config to change that.",
           ]}
         />

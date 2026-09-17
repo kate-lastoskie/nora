@@ -42,6 +42,7 @@ export function Toolbar({
   currentDir,
   selectedId,
   onSelect,
+  designId,
   theme,
   onToggleTheme,
   viewport,
@@ -95,6 +96,7 @@ export function Toolbar({
         <Picker
           entries={entries}
           currentDir={currentDir}
+          designId={designId}
           selectedId={selectedId}
           onPick={onSelect}
           onClose={() => setPanel(null)}

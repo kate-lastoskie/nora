@@ -19,9 +19,11 @@ const REOPEN_KEY = "nora:reopen-picker";
  * state set: there is no render after this to clear it in.
  *
  * @param {string} dir folder to scan, relative to the project root
+ * @param {string | null} [select] what to land on once it opens: an entry id,
+ *   or a bare file path when the exports are not known yet (see App.jsx)
  * @returns {Promise<never>}
  */
-export async function openFolder(dir) {
+export async function openFolder(dir, select = null) {
   // Raised before the request, not after. A successful scan makes the server
   // tell every client to reload, and that broadcast can reach this one while it
   // is still awaiting the response — so the flag has to already be set, or the
@@ -41,8 +43,9 @@ export async function openFolder(dir) {
     throw err;
   }
 
-  // The selection belonged to the folder we are leaving.
-  writeSelectionToUrl(null);
+  // The selection belonged to the folder we are leaving. Replace it with the
+  // one asked for, or clear it so the folder lands on its own design.
+  writeSelectionToUrl(select);
 
   location.reload();
   return await new Promise(() => {});

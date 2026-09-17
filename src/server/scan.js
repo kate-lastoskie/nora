@@ -153,18 +153,33 @@ const normalise = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
  * @param {Map<string,string[]>} opts.imports  rel file -> its import specifiers
  * @param {string} [opts.folder]    the folder's own name, for the naming rule
  * @param {string} [opts.override]  a name/id/file from nora.config
+ * @param {Iterable<string>} [opts.known] every file an import may land on, when
+ *   that is wider than the entries: a folder scanned one level deep still has a
+ *   design whose parts live in its subfolders, and those imports have to count
  * @returns {string|null} the chosen entry id
  */
-export function pickEntry({ entries, imports, folder, override }) {
+export function pickEntry(opts) {
+  return pickEntryReason(opts).id;
+}
+
+/**
+ * `pickEntry`, plus which rule decided. Only the last rule is a guess: the
+ * first file alphabetically is where to land, not a claim about the folder.
+ *
+ * @param {Parameters<typeof pickEntry>[0]} opts
+ * @returns {{ id: string | null, reason: "config" | "composes" | "name" | "first" | null }}
+ */
+export function pickEntryReason({ entries, imports, folder, override, known }) {
   const live = (entries ?? []).filter((e) => !e.unsupported);
-  if (!live.length) return null;
+  if (!live.length) return { id: null, reason: null };
 
   if (override) {
     const hit = live.find((e) => e.name === override || e.id === override || e.file === override);
-    if (hit) return hit.id;
+    if (hit) return { id: hit.id, reason: "config" };
   }
 
   const files = new Set(live.map((e) => e.file));
+  const targets = new Set([...files, ...(known ?? [])]);
   const pulls = new Map();
   const pulledBy = new Map();
 
@@ -172,7 +187,7 @@ export function pickEntry({ entries, imports, folder, override }) {
     if (!files.has(file)) continue;
     for (const spec of specs) {
       if (!spec.startsWith(".")) continue;
-      const target = resolveSibling(file, spec, files);
+      const target = resolveSibling(file, spec, targets);
       if (!target || target === file) continue;
       pulls.set(file, (pulls.get(file) ?? 0) + 1);
       pulledBy.set(target, (pulledBy.get(target) ?? 0) + 1);
@@ -186,7 +201,7 @@ export function pickEntry({ entries, imports, folder, override }) {
     roots.sort(
       (a, b) => (pulls.get(b.file) ?? 0) - (pulls.get(a.file) ?? 0) || a.file.localeCompare(b.file),
     );
-    return roots[0].id;
+    return { id: roots[0].id, reason: "composes" };
   }
 
   if (folder) {
@@ -194,10 +209,10 @@ export function pickEntry({ entries, imports, folder, override }) {
     const named =
       live.find((e) => normalise(e.name) === want) ??
       live.find((e) => normalise(e.name).startsWith(want));
-    if (named) return named.id;
+    if (named) return { id: named.id, reason: "name" };
   }
 
-  return live[0].id;
+  return { id: live[0].id, reason: "first" };
 }
 
 /**
@@ -218,8 +233,15 @@ export function importUrl(root, file, relFile) {
 }
 
 /**
- * Turn a directory into a flat list of registry entries — one per exported
+ * Turn a directory into a list of registry entries — one per exported
  * component, not one per file — plus which of them is the folder's own design.
+ *
+ * One level deep unless `recursive` is set. A project laid out as folders of
+ * projects, each a design over a folder of its parts, used to open as every
+ * component in the tree in one list. Scanning only the folder itself makes the
+ * picker read like the filesystem: this folder's files, then its subfolders.
+ * The files underneath are still listed (not parsed), so a design that
+ * composes `./components/*` is still recognised as the folder's design.
  *
  * @param {object} opts
  * @param {string} opts.root  project root (all paths are reported relative to it)
@@ -227,18 +249,15 @@ export function importUrl(root, file, relFile) {
  * @param {string[]} [opts.include]
  * @param {string[]} [opts.exclude]
  * @param {string} [opts.entry]  nora.config override for this folder
- * @returns {Promise<{entries: Array, entryId: string|null}>}
+ * @param {boolean} [opts.recursive] list components from every subfolder too
+ * @returns {Promise<{entries: Array, entryId: string|null, designId: string|null}>}
  */
-export async function scanDirectory({ root, dir, include, exclude, entry }) {
-  const files = await fg(include?.length ? include : DEFAULT_INCLUDE, {
-    cwd: dir,
-    absolute: true,
-    ignore: [...DEFAULT_EXCLUDE, ...(exclude ?? [])],
-    onlyFiles: true,
-    suppressErrors: true,
-  });
-
-  files.sort();
+export async function scanDirectory({ root, dir, include, exclude, entry, recursive = false }) {
+  const all = await listFiles({ dir, include, exclude });
+  const files = recursive ? all : all.filter((file) => path.dirname(file) === path.resolve(dir));
+  const known = recursive
+    ? undefined
+    : all.map((file) => path.relative(root, file).split(path.sep).join("/"));
 
   const entries = [];
   const imports = new Map();
@@ -283,15 +302,43 @@ export async function scanDirectory({ root, dir, include, exclude, entry }) {
     }
   }
 
+  const picked = pickEntryReason({
+    entries,
+    imports,
+    folder: path.basename(dir),
+    override: entry,
+    known,
+  });
+
   return {
     entries,
-    entryId: pickEntry({
-      entries,
-      imports,
-      folder: path.basename(dir),
-      override: entry,
-    }),
+    // Where to land.
+    entryId: picked.id,
+    // The folder's design, when there is evidence for one. Null when the
+    // landing spot was only the first file alphabetically.
+    designId: picked.reason === "first" ? null : picked.id,
   };
+}
+
+/**
+ * Every candidate component file under `dir`, sorted, as absolute paths.
+ * Listing only: nothing is read or parsed.
+ *
+ * @param {object} opts
+ * @param {string} opts.dir absolute directory
+ * @param {string[]} [opts.include]
+ * @param {string[]} [opts.exclude]
+ * @returns {Promise<string[]>}
+ */
+export async function listFiles({ dir, include, exclude }) {
+  const files = await fg(include?.length ? include : DEFAULT_INCLUDE, {
+    cwd: dir,
+    absolute: true,
+    ignore: [...DEFAULT_EXCLUDE, ...(exclude ?? [])],
+    onlyFiles: true,
+    suppressErrors: true,
+  });
+  return files.map((f) => path.resolve(f)).sort();
 }
 
 /**

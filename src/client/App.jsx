@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { entries, currentDir, entryId, config } from "virtual:nora/registry";
+import { entries, currentDir, entryId, designId, config } from "virtual:nora/registry";
 import { Toolbar } from "./toolbar/Toolbar.jsx";
 import { Canvas } from "./canvas/Canvas.jsx";
 import { findViewport, customViewport, DEFAULT_VIEWPORT } from "./viewports.js";
 import { runSweep } from "./sweep/run-sweep.js";
 import { consumeReopenFlag } from "./open-folder.js";
-import { readSelectionFromUrl, writeSelectionToUrl } from "./selection.js";
+import { readSelectionFromUrl, resolveSelection, writeSelectionToUrl } from "./selection.js";
 import { matchChord } from "./chords.js";
 
 const THEME_KEY = "nora:theme";
@@ -38,10 +38,18 @@ export function App() {
   // opens on the thing that folder *is* rather than on an empty canvas. The URL
   // still wins, since it is the more specific statement of intent.
   const [selectedId, setSelectedId] = useState(() => {
-    const fromUrl = readSelectionFromUrl();
-    if (entries.some((e) => e.id === fromUrl)) return fromUrl;
+    const fromUrl = resolveSelection(entries, readSelectionFromUrl());
+    if (fromUrl) return fromUrl;
     return entries.some((e) => e.id === entryId) ? entryId : null;
   });
+
+  // A file path from search becomes the entry id it resolved to, so the URL
+  // names exactly what is on screen.
+  useEffect(() => {
+    if (selectedId && readSelectionFromUrl() !== selectedId) writeSelectionToUrl(selectedId);
+    // Once, on boot: after that every change goes through select().
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [expanded, setExpanded] = useState(
     () => REOPENING || readStored(EXPANDED_KEY, "1") === "1",
   );
@@ -200,6 +208,7 @@ export function App() {
         currentDir={currentDir}
         selectedId={selectedId}
         onSelect={select}
+        designId={designId}
         theme={theme}
         onToggleTheme={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
         viewport={viewport}

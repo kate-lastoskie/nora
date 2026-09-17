@@ -122,3 +122,13 @@ test("storage being unavailable does not break the operation", async () => {
   await tick();
   assert.equal(calls.reloads, 1, "the folder still opens; only the handoff is lost");
 });
+
+test("can land on a chosen component instead of clearing the selection", async () => {
+  const { calls } = stubEnv();
+  const { openFolder } = await load();
+  openFolder("src/projects/checkout", "src/projects/checkout/Aside.jsx#Aside");
+  await tick();
+  assert.equal(calls.reloads, 1);
+  const last = new URL(calls.replaced.at(-1));
+  assert.equal(last.searchParams.get("c"), "src/projects/checkout/Aside.jsx#Aside");
+});

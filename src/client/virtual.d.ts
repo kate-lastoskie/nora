@@ -24,5 +24,7 @@ declare module "virtual:nora/registry" {
   export const currentDir: string | null;
   /** The folder's own top-level design, chosen by `pickEntry`. */
   export const entryId: string | null;
+  /** The same entry when there is evidence it is the folder's design, else null. */
+  export const designId: string | null;
   export const config: Record<string, unknown>;
 }

@@ -33,8 +33,14 @@ Tailwind, PostCSS and tsconfig paths all work.
 
 ## Features
 
-- **Pick any folder** and every component in it is found
-- **⌘K** opens one picker holding both components and the folders around them
+- **Walk your project like a filesystem.** Each folder lists its own components,
+  then its subfolders. Nested folders stay in their folders instead of piling
+  into one long list.
+- **Lands on the design.** The file that pulls the rest of the folder together
+  (including parts kept in a subfolder like `components/`) is listed first,
+  marked **Design**, and opens first
+- **⌘K** opens the picker. Typing searches this folder's components, and every
+  file below it by name
 - **Viewport presets** 375 / 768 / 1280 / 1440, or fit to the canvas
 - **Sweep** drives the frame 320→1600 and flags overflow and real breakpoints
 - **Copy findings** as text built for pasting into an AI agent
@@ -58,26 +64,29 @@ export default {
 };
 ```
 
-| Option            | What it does                                                      |
-| ----------------- | ----------------------------------------------------------------- |
-| `wrapper`         | Wraps every previewed component: providers, router, theme         |
-| `defaultDir`      | Folder to open on boot                                            |
-| `defaultViewport` | `fit`, `375`, `768`, `1280`, or `1440`                            |
-| `include`         | Glob patterns to scan (default `**/*.{tsx,jsx}`)                  |
-| `exclude`         | Glob patterns to skip, added to the defaults                      |
-| `entry`           | Per-folder override for which component _is_ that folder's design |
+| Option            | What it does                                                        |
+| ----------------- | ------------------------------------------------------------------- |
+| `wrapper`         | Wraps every previewed component: providers, router, theme           |
+| `defaultDir`      | Folder to open on boot                                              |
+| `defaultViewport` | `fit`, `375`, `768`, `1280`, or `1440`                              |
+| `include`         | Glob patterns to scan (default `**/*.{tsx,jsx}`)                    |
+| `exclude`         | Glob patterns to skip, added to the defaults                        |
+| `entry`           | Per-folder override for which component _is_ that folder's design   |
+| `recursive`       | `true` lists every component under a folder in one list, as 0.1 did |
 
 `wrapper` is the one most projects need. A component rendered outside your app
 has no providers around it, so anything reading context throws on mount.
 
 ## Keyboard
 
-|                 |                                         |
-| --------------- | --------------------------------------- |
-| `⌘K` / `Ctrl K` | open the picker                         |
-| `⌘O` / `Ctrl O` | open the picker                         |
-| `⌥↑` / `⌥↓`     | step to the previous / next component   |
-| `Esc`           | close a panel, then clear the selection |
+|                 |                                             |
+| --------------- | ------------------------------------------- |
+| `⌘K` / `Ctrl K` | open the picker                             |
+| `⌘O` / `Ctrl O` | open the picker                             |
+| `→` / `←`       | in the picker: look inside / go up          |
+| `Enter`         | in the picker: open the folder or component |
+| `⌥↑` / `⌥↓`     | step to the previous / next component       |
+| `Esc`           | close a panel, then clear the selection     |
 
 These work even when focus is inside the preview.
 

@@ -1,6 +1,6 @@
 import path from "node:path";
 import fs from "node:fs";
-import { clientEntry, scanDirectory, listDirectories } from "./scan.js";
+import { clientEntry, scanDirectory, listDirectories, listFiles } from "./scan.js";
 import { safeResolve, isInside, isLoopbackHost } from "./safe-path.js";
 
 const VIRTUAL_ID = "virtual:nora/registry";
@@ -27,6 +27,9 @@ export function outsideRoots(root, dir) {
   const abs = path.resolve(root, dir);
   return isInside(root, abs) ? [] : [abs];
 }
+
+/** Most files one search will list. Past this the picker says so. */
+const FIND_LIMIT = 5000;
 
 const CONFIG_NAMES = ["nora.config.tsx", "nora.config.ts", "nora.config.jsx", "nora.config.js"];
 
@@ -91,6 +94,7 @@ export function nora({ root, initialDir = null }) {
    *   exclude?: string[],
    *   defaultDir?: string,
    *   entry?: Record<string, string>,
+   *   recursive?: boolean,
    * }}
    */
   let userConfig = {};
@@ -98,6 +102,21 @@ export function nora({ root, initialDir = null }) {
   const configFile = findConfigFile(root);
   const extraRoots = outsideRoots(root, initialDir);
   const rootImporter = path.join(root, "index.html");
+
+  /**
+   * Scan one folder with the project's settings applied.
+   *
+   * @param {string} rel folder relative to the root
+   */
+  const scan = (rel) =>
+    scanDirectory({
+      root,
+      dir: path.resolve(root, rel),
+      include: userConfig.include,
+      exclude: userConfig.exclude,
+      entry: userConfig.entry?.[rel],
+      recursive: Boolean(userConfig.recursive),
+    });
 
   return {
     name: "nora",
@@ -131,17 +150,12 @@ export function nora({ root, initialDir = null }) {
           "export const entries = [];",
           "export const currentDir = null;",
           "export const entryId = null;",
+          "export const designId = null;",
           "export const config = __userConfig;",
         ].join("\n");
       }
 
-      const { entries, entryId } = await scanDirectory({
-        root,
-        dir: path.join(root, currentDir),
-        include: userConfig.include,
-        exclude: userConfig.exclude,
-        entry: userConfig.entry?.[currentDir],
-      });
+      const { entries, entryId, designId } = await scan(currentDir);
 
       // One explicit dynamic import per entry. A bare import.meta.glob here
       // would only give us file paths — generating the imports ourselves is
@@ -160,6 +174,7 @@ export function nora({ root, initialDir = null }) {
         "];",
         `export const currentDir = ${JSON.stringify(currentDir)};`,
         `export const entryId = ${JSON.stringify(entryId)};`,
+        `export const designId = ${JSON.stringify(designId)};`,
         "export const config = __userConfig;",
       ].join("\n");
     },
@@ -208,10 +223,40 @@ export function nora({ root, initialDir = null }) {
           // An outside folder is as far up as the picker can go. Saying so
           // lets it hide its up row instead of offering a step that is refused.
           const top = extraRoots.some((dir) => path.relative(dir, abs) === "");
+
+          // The folder's own components, so browsing into a folder shows what
+          // is in it before anything is opened. Parsed, not imported: the
+          // registry is still the only thing that loads component code.
+          let entries = [];
+          let designId = null;
+          if (url.searchParams.get("components") === "1") {
+            const scanned = await scan(relNorm);
+            entries = scanned.entries.map(clientEntry);
+            designId = scanned.designId;
+          }
           // No `parent`: the picker needs it synchronously to draw its up row,
           // and derives it from the path it already holds with exactly this
           // logic. Sending it only made the endpoint wider.
-          sendJson(res, 200, { path: relNorm, dirs, top });
+          sendJson(res, 200, { path: relNorm, dirs, top, entries, designId });
+        }),
+      );
+
+      // Every candidate file below a folder, for searching past the level
+      // you are looking at. Paths only; nothing is parsed.
+      server.middlewares.use(
+        "/__nora/find",
+        guard(async (req, res) => {
+          const url = new URL(req.url ?? "/", "http://localhost");
+          const abs = safeResolve(root, url.searchParams.get("path") ?? "", extraRoots);
+          const all = await listFiles({
+            dir: abs,
+            include: userConfig.include,
+            exclude: userConfig.exclude,
+          });
+          const files = all
+            .slice(0, FIND_LIMIT)
+            .map((file) => path.relative(root, file).split(path.sep).join("/"));
+          sendJson(res, 200, { files, truncated: all.length > FIND_LIMIT });
         }),
       );
 
